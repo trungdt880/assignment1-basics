@@ -29,6 +29,14 @@ build-backend = "uv_build"
 module-name = "cs336_basics"
 module-root = ""
 
+[tool.uv.sources]
+torch = { index = "pytorch-cu128" }
+
+[[tool.uv.index]]
+name = "pytorch-cu128"
+url = "https://download.pytorch.org/whl/cu128"
+explicit = true
+
 [tool.uv]
 package = true
 python-preference = "managed"
