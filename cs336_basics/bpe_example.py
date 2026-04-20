@@ -115,7 +115,7 @@ def train_bpe(input, num_merges, special_tokens):
     )
     merges = []
     for i in trange(num_merges, desc="BPE"):
-        best_pair = max(pair_counter, key=lambda x: (pair_counter[x], x))
+        best_pair = max(pair_counter.items(), key=lambda kv: (kv[1], kv[0]))[0]
         new_idx = len(vocab)
         vocab[new_idx] = b"".join(best_pair)
         merges.append(best_pair)
