@@ -1,5 +1,6 @@
 import os
 from collections import defaultdict
+from multiprocessing import Pool
 from typing import BinaryIO
 
 import regex as re
@@ -60,27 +61,40 @@ def find_chunk_boundaries(
 PAT = r"""'(?:[sdmt]|ll|ve|re)| ?\p{L}+| ?\p{N}+| ?[^\s\p{L}\p{N}]+|\s+(?!\S)|\s+"""
 special_tokens = ["<|endoftext|>"]
 MAX_VOCAB = 10000
+fpath = "../data/TinyStoriesV2-GPT4-valid.txt"
 
-with open("../data/TinyStoriesV2-GPT4-valid.txt", "rb") as f:
-    num_processes = 4
-    boundaries = find_chunk_boundaries(f, num_processes, b"<|endoftext|>")
+
+def chunk_count(args):
+    fpath, start, end = args
     counter = defaultdict(int)
-
-    # The following is a serial implementation, but you can parallelize this
-    # by sending each start/end pair to a set of processes.
-    for start, end in zip(boundaries[:-1], boundaries[1:]):
+    with open(fpath, "rb") as f:
         f.seek(start)
         chunk = f.read(end - start).decode("utf-8", errors="ignore")
         samples = re.split("|".join(map(re.escape, special_tokens)), chunk)
         samples = [re.finditer(PAT, sample) for sample in samples]
-        for sample in tqdm(samples, "Pre-tokenizing"):
+        for sample in samples:
             for token in sample:
                 counter[token.group()] += 1
+    return counter
 
-    vocab, merges, new_tokens = train_bpe(
-        counter,
-        num_merges=MAX_VOCAB - (len(special_tokens) + 256),
-        special_tokens=special_tokens,
-    )
-    print(merges)
-    breakpoint()
+
+num_processes = 4
+with open(fpath, "rb") as f:
+    boundaries = find_chunk_boundaries(f, num_processes, b"<|endoftext|>")
+args = zip([fpath] * (len(boundaries) - 1), boundaries[:-1], boundaries[1:])
+with Pool(4) as p:
+    results = list(tqdm(p.imap_unordered(chunk_count, args), total=len(boundaries) - 1))
+
+counter = defaultdict(int)
+for local_counter in results:
+    for k, v in local_counter.items():
+        counter[k] += v
+
+
+vocab, merges, new_tokens = train_bpe(
+    counter,
+    num_merges=MAX_VOCAB - (len(special_tokens) + 256),
+    special_tokens=special_tokens,
+)
+print(merges)
+breakpoint()

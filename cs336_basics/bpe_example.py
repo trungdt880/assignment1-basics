@@ -68,7 +68,7 @@ def merge_v2(
         for pair, pair_freq in old_word_pair_count.items():
             # how many times word appear * how many time that pair appear in that word
             pair_counter[pair] -= word_freq * pair_freq
-            if pair_counter[pair] < 0:
+            if pair_counter[pair] <= 0:
                 pair_counter.pop(pair, None)
             pair_to_word[pair].discard(word)
             if not pair_to_word[pair]:
