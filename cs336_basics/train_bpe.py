@@ -6,7 +6,7 @@ from pathlib import Path
 import tyro
 from tqdm import tqdm
 
-from cs336_basics.bpe_example import _train_bpe
+from cs336_basics.bpe_example import train_bpe_internal
 from cs336_basics.pretokenization_example import chunk_count, find_chunk_boundaries
 
 PAT = r"""'(?:[sdmt]|ll|ve|re)| ?\p{L}+| ?\p{N}+| ?[^\s\p{L}\p{N}]+|\s+(?!\S)|\s+"""
@@ -36,7 +36,7 @@ def train_bpe(
         for k, v in local_counter.items():
             counter[k] += v
 
-    vocab, merges, new_tokens = _train_bpe(
+    vocab, merges, new_tokens = train_bpe_internal(
         counter,
         num_merges=vocab_size - (len(special_tokens) + 256),
         special_tokens=special_tokens,

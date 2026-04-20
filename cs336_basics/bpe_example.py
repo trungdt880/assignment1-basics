@@ -99,7 +99,7 @@ def merge_v2(
             pair_to_word[pair].add(new_word)
 
 
-def train_bpe(input, num_merges, special_tokens):
+def train_bpe_internal(input, num_merges, special_tokens):
     word_counter = {
         tuple(bytes([c]) for c in k.encode("utf-8")): v for k, v in input.items()
     }
@@ -127,7 +127,7 @@ def train_bpe(input, num_merges, special_tokens):
 if __name__ == "__main__":
     text = "low low low low low lower lower widest widest widest newest newest newest newest newest newest"
     input = Counter(text.split(" "))
-    vocab, merges, tokens = train_bpe(
+    vocab, merges, tokens = train_bpe_internal(
         input, num_merges=6, special_tokens=["<|endoftext|>"]
     )
     print(merges)
