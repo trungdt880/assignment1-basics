@@ -46,81 +46,61 @@ def merge(best_pair: tuple[bytes, bytes], token_counter: dict[tuple[bytes, ...],
             token_counter[tuple(new_token)] = freq
 
 
-def merge_v2(best_pair, token_counter, pair_counter, pair_to_token):
-    # update pair_counter:
+def get_pair_from_word(word):
+    return [(x, y) for x, y in zip(word, word[1:])]
+
+
+def merge_v2(
+    best_pair: tuple[bytes, bytes],
+    word_counter: dict[tuple[bytes, ...], int],
+    pair_counter: dict[tuple[bytes, bytes], int],
+    pair_to_word: dict[tuple[bytes, bytes], set[tuple[bytes, ...]]],
+):
     best_pair_merged = b"".join(best_pair)
-    best_pair_freq = pair_counter[best_pair]
-    tokens = list(pair_to_token[best_pair])
 
-    # for every token that has this pair
-    for token in tokens:
+    affected_words = list(pair_to_word[best_pair])
+    for word in affected_words:
+        word_freq = word_counter.get(word, 0)
+        if word_freq <= 0:
+            continue
+
+        old_word_pair_count = Counter(get_pair_from_word(word))
+        for pair, pair_freq in old_word_pair_count.items():
+            # how many times word appear * how many time that pair appear in that word
+            pair_counter[pair] -= word_freq * pair_freq
+            if pair_counter[pair] < 0:
+                pair_counter.pop(pair, None)
+            pair_to_word[pair].discard(word)
+            if not pair_to_word[pair]:
+                pair_to_word.pop(pair, None)
+
+        new_word = []
         i = 0
-        best_pair_ids = []
-
-        # update that token to use the merged pair
-        new_token = []
-        while i < len(token):
-            if (i + 1 < len(token)) and (
-                token[i] == best_pair[0] and token[i + 1] == best_pair[1]
+        while i < len(word):
+            if (
+                (i < len(word) - 1)
+                and word[i] == best_pair[0]
+                and word[i + 1] == best_pair[1]
             ):
-                new_token.append(best_pair_merged)
-                best_pair_ids.append(i)
+                new_word.append(best_pair_merged)
                 i += 2
             else:
-                new_token.append(token[i])
+                new_word.append(word[i])
                 i += 1
-        new_token = tuple(new_token)
+        new_word = tuple(new_word)
 
-        token_freq = token_counter[token]
-        del token_counter[token]
-        if new_token not in token_counter:
-            token_counter[new_token] = token_freq
-        else:
-            token_counter[new_token] += token_freq
+        word_counter.pop(word)
+        word_counter[new_word] = word_counter.get(new_word, 0) + word_freq
 
-        for pair in zip(token, token[1:]):
-            if token in pair_to_token[pair]:
-                pair_to_token[pair].remove(token)
-        for pair in zip(new_token, new_token[1:]):
-            pair_to_token[pair].add(new_token)
-
-        for k, best_pair_idx_for_old_token in enumerate(best_pair_ids):
-            best_pair_idx_for_new_token = best_pair_idx_for_old_token - k
-            if best_pair_idx_for_new_token > 0:
-                if k == 0 or best_pair_ids[k] != best_pair_ids[k - 1] + 2:
-                    new_pair = (
-                        new_token[best_pair_idx_for_new_token - 1],
-                        new_token[best_pair_idx_for_new_token],
-                    )
-                    pair_counter[new_pair] += token_freq
-
-                    old_pair = (
-                        token[best_pair_idx_for_old_token - 1],
-                        token[best_pair_idx_for_old_token],
-                    )
-                    pair_counter[old_pair] -= token_freq
-
-            if best_pair_idx_for_new_token < len(new_token) - 1:
-                new_pair = (
-                    new_token[best_pair_idx_for_new_token],
-                    new_token[best_pair_idx_for_new_token + 1],
-                )
-                pair_counter[new_pair] += token_freq
-
-            if best_pair_idx_for_old_token < len(token) - 2:
-                old_pair = (
-                    token[best_pair_idx_for_old_token + 1],
-                    token[best_pair_idx_for_old_token + 2],
-                )
-                pair_counter[old_pair] -= token_freq
-
-    # update the pair counter:
-    pair_counter[best_pair] -= best_pair_freq
-    del pair_to_token[best_pair]
+        new_word_pair_count = Counter(get_pair_from_word(new_word))
+        for pair, pair_freq in new_word_pair_count.items():
+            # how many times word appear * how many time that pair appear in that word
+            pair_counter[pair] += word_freq * pair_freq
+            pair_to_word[pair].add(new_word)
 
 
 def train_bpe(input, num_merges, special_tokens):
-    token_counter = {
+    word_counter = {
         tuple(bytes([c]) for c in k.encode("utf-8")): v for k, v in input.items()
     }
 
@@ -131,7 +111,7 @@ def train_bpe(input, num_merges, special_tokens):
     vocab.update({x + len(special_tokens): bytes([x]) for x in range(256)})
 
     pair_counter, pair_to_token = count_adjacent_pair_v2(
-        token_counter,
+        word_counter,
     )
     merges = []
     for i in trange(num_merges, desc="BPE"):
@@ -140,8 +120,8 @@ def train_bpe(input, num_merges, special_tokens):
         vocab[new_idx] = b"".join(best_pair)
         merges.append(best_pair)
         # merge(best_pair, token_counter, pair_counter)
-        merge_v2(best_pair, token_counter, pair_counter, pair_to_token)
-    return vocab, merges, token_counter
+        merge_v2(best_pair, word_counter, pair_counter, pair_to_token)
+    return vocab, merges, word_counter
 
 
 if __name__ == "__main__":
