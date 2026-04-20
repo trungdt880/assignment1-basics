@@ -1,5 +1,10 @@
 import os
+from collections import defaultdict
 from typing import BinaryIO
+
+import regex as re
+from bpe_example import train_bpe
+from tqdm import tqdm
 
 
 def find_chunk_boundaries(
@@ -11,7 +16,9 @@ def find_chunk_boundaries(
     Chunk the file into parts that can be counted independently.
     May return fewer chunks if the boundaries end up overlapping.
     """
-    assert isinstance(split_special_token, bytes), "Must represent special token as a bytestring"
+    assert isinstance(
+        split_special_token, bytes
+    ), "Must represent special token as a bytestring"
 
     # Get total file size in bytes
     file.seek(0, os.SEEK_END)
@@ -50,13 +57,30 @@ def find_chunk_boundaries(
 
 
 ## Usage
-with open(..., "rb") as f:
+PAT = r"""'(?:[sdmt]|ll|ve|re)| ?\p{L}+| ?\p{N}+| ?[^\s\p{L}\p{N}]+|\s+(?!\S)|\s+"""
+special_tokens = ["<|endoftext|>"]
+MAX_VOCAB = 10000
+
+with open("../data/TinyStoriesV2-GPT4-valid.txt", "rb") as f:
     num_processes = 4
     boundaries = find_chunk_boundaries(f, num_processes, b"<|endoftext|>")
+    counter = defaultdict(int)
 
     # The following is a serial implementation, but you can parallelize this
     # by sending each start/end pair to a set of processes.
     for start, end in zip(boundaries[:-1], boundaries[1:]):
         f.seek(start)
         chunk = f.read(end - start).decode("utf-8", errors="ignore")
-        # Run pre-tokenization on your chunk and store the counts for each pre-token
+        samples = re.split("|".join(map(re.escape, special_tokens)), chunk)
+        samples = [re.finditer(PAT, sample) for sample in samples]
+        for sample in tqdm(samples, "Pre-tokenizing"):
+            for token in sample:
+                counter[token.group()] += 1
+
+    vocab, merges, new_tokens = train_bpe(
+        counter,
+        num_merges=MAX_VOCAB - (len(special_tokens) + 256),
+        special_tokens=special_tokens,
+    )
+    print(merges)
+    breakpoint()
