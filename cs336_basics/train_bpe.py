@@ -17,8 +17,8 @@ def train_bpe(
     vocab_size: int = 10000,
     special_tokens: list[str] = ["<|endoftext|>"],
     output_path: Path | None = None,
+    num_processes: int = 16,
 ):
-    num_processes = 16
     with open(input_path, "rb") as f:
         boundaries = find_chunk_boundaries(f, num_processes, b"<|endoftext|>")
     args = zip(
