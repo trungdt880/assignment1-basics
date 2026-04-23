@@ -3,20 +3,6 @@ from collections.abc import Iterable
 from pathlib import Path
 
 import regex as re
-from tqdm import tqdm
-
-from cs336_basics.bpe_example import get_pair_byte_from_word, get_pair_from_word
-
-# def tmp():
-#     samples = re.split("|".join(map(re.escape, special_tokens)), chunk)
-#     samples = [re.finditer(pat, sample) for sample in samples]
-#     for sample in samples:
-#         for token in sample:
-#             counter[token.group()] += 1
-
-
-def argmin(array):
-    return min(enumerate(array), key=lambda x: x[1])[0]
 
 
 class Tokenizer:
