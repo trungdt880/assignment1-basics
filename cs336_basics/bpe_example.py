@@ -50,6 +50,10 @@ def get_pair_from_word(word):
     return [(x, y) for x, y in zip(word, word[1:])]
 
 
+def get_pair_byte_from_word(word):
+    return [(x.encode("utf-8"), y.encode("utf-8")) for x, y in zip(word, word[1:])]
+
+
 def merge_v2(
     best_pair: tuple[bytes, bytes],
     word_counter: dict[tuple[bytes, ...], int],
