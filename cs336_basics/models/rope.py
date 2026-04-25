@@ -25,7 +25,7 @@ class RoPE(nn.Module):
         self,
         x: Float[torch.Tensor, "... seq_len d_k"],
         token_positions: Int[torch.Tensor, "... seq_len"],
-    ):
+    ) -> Float[torch.Tensor, "... seq_len d_k"]:
         x_even = x[..., ::2]
         x_odd = x[..., 1::2]
         token_sine = self.sines[token_positions]

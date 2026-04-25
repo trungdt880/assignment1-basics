@@ -4,8 +4,8 @@ import torch.nn as nn
 from jaxtyping import Float
 
 
-def softmax(x: Float[torch.Tensor, "..."], dim):
-    max = torch.max(x, dim=dim)[0][..., None]
+def softmax(x: Float[torch.Tensor, "..."], dim: int) -> Float[torch.Tensor, "..."]:
+    max = torch.max(x, dim=dim, keepdim=True)[0]
     exp = torch.exp(x - max)
     sum_exp = torch.sum(exp, dim=dim, keepdim=True)
     return exp / sum_exp
