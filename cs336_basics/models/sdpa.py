@@ -16,13 +16,13 @@ def scaled_dot_product_attention(
 ) -> Float[torch.Tensor, "... seq_len_q d_v"]:
     d_k = Q.shape[-1]
 
-    QK_T = einx.dot(
+    qk_T = einx.dot(
         "... seq_len_q d_k, ... seq_len_k d_k -> ... seq_len_q seq_len_k", Q, K
     )
-    normed_QK_T = QK_T / math.sqrt(d_k)
+    qk_T /= math.sqrt(d_k)
     if mask is not None:
-        normed_QK_T[~mask] = float("-inf")
-    attention_map = softmax(normed_QK_T, dim=-1)
+        qk_T[~mask] = float("-inf")
+    attention_map = softmax(qk_T, dim=-1)
     attention_value = einx.dot(
         "... seq_len_q seq_len_k, ... seq_len_k d_v -> ... seq_len_q d_v",
         attention_map,

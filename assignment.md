@@ -134,3 +134,116 @@ TOTAL_FLOPS=133,577,729,638,400
 # learning_rate_tuning
 - converge speed 1e2 > 1e1
 - 1e3 diverge
+
+# adamw_accounting
+## Part (a)
+
+```text
+- Params: 
+    TOKEN_EMBED = FLOAT_SIZE * vocab_size * d_model
+    HEAD = FLOAT_SIZE * vocab_size * d_model
+    QKVO = 4 * (FLOAT_SIZE * d_model * d_model)
+    FFN = 3 * (FLOAT_SIZE * d_model * d_ff)
+    RMS_NORM_IN_ONE_BLOCK = 2 * (FLOAT_SIZE * d_model)
+    ONE_BLOCK = QKVO + FFN + RMS_NORM_IN_ONE_BLOCK
+    RMS_NORM_FINAL = 1 * (FLOAT_SIZE * d_model)
+    TOTAL_PARAMS_BYTES = TOKEN_EMBED + num_layers * ONE_BLOCK + RMS_NORM_FINAL + HEAD
+    TOTAL_PARAMS_BYTES = FLOAT_SIZE * (vocab_size*d_model*2 + num_layers*(4*d_model*d_model+3*d_model*d_ff+2*d_model) + d_model)
+
+```
+- Peak activations:
+
+| Component                  | Size      |
+| -------------------------- | --------- |
+| 2 RMSNorm outputs          | 2·BTd     |
+| Q, K, V projections        | 3·BTd     |
+| QKᵀ scores                 | BHT²      |
+| softmax(QKᵀ)               | BHT²      |
+| weighted sum (attn output) | BTd       |
+| output projection          | BTd       |
+| W₁·x (gate pre-act)        | BT·(8d/3) |
+| SiLU(W₁·x)                 | BT·(8d/3) |
+| W₃·x                       | BT·(8d/3) |
+| gate ⊙ up                  | BT·(8d/3) |
+| W₂·(…)                     | BTd       |
+
+- Per-layer sum: 8BTd + 4·(8d/3)BT + 2BHT² = **(56/3)BTd + 2BHT²**
+- **After the stack:**
+    - final RMSNorm: BTd
+    - output embedding (logits): BT·V
+    - cross-entropy (softmax probs saved for backward): BT·V
+
+- $$A = L\!\left[\tfrac{56}{3}\,BTd + 2BHT^2\right] + BTd + 2BTV$$
+- Total peak memory (float32 → 4 bytes/element)
+    - MEM = 4*PARAMS + 4*PARAMS [grad] + 4*2*PARAMS [adamw] + 4*A = 16*PARAMS + 4*A
+
+## Part (b): Instantiate for GPT-2 XL
+
+**GPT-2 XL hyperparameters:** V = 50,257, T = 1,024, L = 48, d = 1,600, H = 25 (so d_k = 64). With d_ff = 8d/3, FFN params per layer = 3·d·(8d/3) = 8d², matching standard GPT-2 XL's parameter count.
+
+**Parameters:**
+$$P = 2Vd + L(12d^2 + 2d) + d$$
+- 2Vd = 2 · 50,257 · 1,600 = 160,822,400
+- L(12d² + 2d) = 48 · 30,723,200 = 1,474,713,600
+- d = 1,600
+- **P ≈ 1.636 × 10⁹**
+
+So **16P ≈ 2.617 × 10¹⁰ bytes ≈ 26.17 GB** (params + grads + optimizer).
+
+**Activations (per unit batch):**
+
+$$A/B = L\!\left[\tfrac{56}{3}Td + 2HT^2\right] + Td + 2TV$$
+
+Plugging in:
+- L · (56/3) · T · d = 48 · (56/3) · 1024 · 1600 = 1,468,006,400
+- L · 2 · H · T² = 48 · 50 · 1,048,576 = 2,516,582,400
+- Td = 1,638,400
+- 2TV = 102,926,336
+
+Sum: A/B ≈ 4.089 × 10⁹ floats, so **4A ≈ 1.636 × 10¹⁰ B bytes ≈ 16.36 · B GB**.
+
+**Final expression:**
+$$\boxed{\;\text{Mem}(B) \approx 16.36\,B + 26.17 \text{ GB}\;}$$
+
+So a ≈ 16.36 GB, b ≈ 26.17 GB.
+
+**Max batch size in 80 GB:** 16.36·B + 26.17 ≤ 80 ⟹ B ≤ 3.29 ⟹ **B_max = 3**.
+
+## Part (c): FLOPs for one AdamW step
+
+AdamW updates each of the P parameters independently with the same recipe. Per parameter (treating each scalar op as 1 FLOP, with scalars like (1−β₁), αλ precomputed once):
+
+| Op | FLOPs |
+|---|---|
+| m ← β₁m + (1−β₁)g | 3 (2 mul + 1 add) |
+| v ← β₂v + (1−β₂)g² | 4 (g²: 1 mul, then 2 mul + 1 add) |
+| m̂ = m / (1−β₁ᵗ) | 1 (div by scalar) |
+| v̂ = v / (1−β₂ᵗ) | 1 |
+| θ ← θ − α · m̂ / (√v̂ + ε) | 5 (sqrt, add, div, mul, sub) |
+| Weight decay: θ ← θ − αλθ | 2 (mul, sub) |
+| **Total per param** | **≈ 16** |
+
+$$\boxed{\;\text{FLOPs}_{\text{AdamW step}} \approx 16P \approx 2.6 \times 10^{10}\;}$$
+
+This is negligible compared to the forward + backward pass (~10¹³ FLOPs per step), which is the standard result: optimizer FLOPs don't matter, optimizer *memory* does.
+
+## Part (d): Training time on one H100
+
+**FLOPs per token (Kaplan/Hoffmann approximation):**
+- Forward pass ≈ 2P FLOPs/token (every parameter participates in one multiply + one add)
+- Backward pass ≈ 4P FLOPs/token (given as 2× forward)
+- **Total ≈ 6P FLOPs/token**
+
+**Total tokens trained:**
+$$\text{tokens} = B \cdot T \cdot \text{steps} = 1024 \cdot 1024 \cdot 400{,}000 \approx 4.19 \times 10^{11}$$
+
+**Total training FLOPs:**
+$$6P \cdot \text{tokens} = 6 \cdot (1.636 \times 10^9) \cdot (4.19 \times 10^{11}) \approx 4.12 \times 10^{21} \text{ FLOPs}$$
+
+**Effective throughput on H100:**
+$$0.50 \cdot 495 \times 10^{12} = 2.475 \times 10^{14} \text{ FLOP/s}$$
+
+**Time:**
+$$\frac{4.12 \times 10^{21}}{2.475 \times 10^{14}} \approx 1.66 \times 10^{7} \text{ s} \approx \boxed{\;4{,}600 \text{ hours} \;\approx\; 193 \text{ days}\;}$$
+
+Sanity check: ~6 months on a single H100 for a 1.5B-param model is the right order of magnitude — and exactly why people use clusters of hundreds of GPUs in practice.
