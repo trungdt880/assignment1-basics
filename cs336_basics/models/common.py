@@ -1,5 +1,10 @@
 import math
+import os
+from pathlib import Path
+from typing import IO, BinaryIO
 
+import numpy as np
+import numpy.typing as npt
 import torch
 from jaxtyping import Float, Int
 
@@ -44,9 +49,56 @@ def gradient_clipping(
 ):
     grads = [p.grad.data for p in params if p.grad is not None]
 
-    total_grads = torch.sqrt(torch.sum([(g**2).sum() for g in grads]))
+    total_grads = torch.sqrt(sum([(g**2).sum() for g in grads]))
 
     if total_grads >= max_l2_norm:
         scale = max_l2_norm / (total_grads + eps)
         for g in grads:
             g.mul_(scale)
+
+
+def get_batch(
+    dataset: npt.NDArray, batch_size: int, context_length: int, device: str
+) -> tuple[torch.Tensor, torch.Tensor]:
+    ids = np.random.randint(0, len(dataset) - context_length, size=batch_size)
+    ids = ids[..., None] + np.arange(context_length)
+    inputs = dataset[ids]
+    targets = dataset[ids + 1]
+    inputs = (
+        torch.tensor(inputs, dtype=torch.long)
+        .clone()
+        .pin_memory()
+        .to(device, non_blocking=True)
+    )
+    targets = (
+        torch.tensor(targets, dtype=torch.long)
+        .clone()
+        .pin_memory()
+        .to(device, non_blocking=True)
+    )
+    return inputs, targets
+
+
+def save_checkpoint(
+    model: torch.nn.Module,
+    optimizer: torch.optim.Optimizer,
+    iteration: int,
+    out: str | os.PathLike | BinaryIO | IO[bytes],
+):
+    model_state_dict = model.state_dict()
+    opt_state_dict = optimizer.state_dict()
+    final_state_dict = dict(
+        model=model_state_dict, optimizer=opt_state_dict, iteration=iteration
+    )
+    torch.save(final_state_dict, out)
+
+
+def load_checkpoint(
+    src: str | os.PathLike | BinaryIO | IO[bytes],
+    model: torch.nn.Module,
+    optimizer: torch.optim.Optimizer,
+) -> int:
+    state_dict = torch.load(src)
+    model.load_state_dict(state_dict["model"])
+    optimizer.load_state_dict(state_dict["optimizer"])
+    return state_dict["iteration"]
