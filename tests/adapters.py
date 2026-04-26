@@ -33,7 +33,7 @@ def run_linear(
     from cs336_basics.models.linear import Linear
 
     layer = Linear(d_in, d_out)
-    layer.load_state_dict({"weights": weights})
+    layer.load_state_dict({"weight": weights})
     return layer(in_features)
 
 
@@ -58,7 +58,7 @@ def run_embedding(
     from cs336_basics.models.embedding import Embedding
 
     layer = Embedding(vocab_size, d_model)
-    layer.load_state_dict({"weights": weights})
+    layer.load_state_dict({"weight": weights})
     return layer(token_ids)
 
 
@@ -89,9 +89,9 @@ def run_swiglu(
     layer = SwiGLU(d_model, d_ff)
     layer.load_state_dict(
         {
-            "linear1.weights": w1_weight,
-            "linear2.weights": w2_weight,
-            "linear3.weights": w3_weight,
+            "w1.weight": w1_weight,
+            "w2.weight": w2_weight,
+            "w3.weight": w3_weight,
         }
     )
     return layer(in_features)
@@ -156,10 +156,10 @@ def run_multihead_self_attention(
     layer = MultiHeadAttention(d_model, num_heads)
     layer.load_state_dict(
         {
-            "q_proj.weights": q_proj_weight,
-            "k_proj.weights": k_proj_weight,
-            "v_proj.weights": v_proj_weight,
-            "o_proj.weights": o_proj_weight,
+            "q_proj.weight": q_proj_weight,
+            "k_proj.weight": k_proj_weight,
+            "v_proj.weight": v_proj_weight,
+            "output_proj.weight": o_proj_weight,
         }
     )
 
@@ -213,10 +213,10 @@ def run_multihead_self_attention_with_rope(
 
     layer.load_state_dict(
         {
-            "q_proj.weights": q_proj_weight,
-            "k_proj.weights": k_proj_weight,
-            "v_proj.weights": v_proj_weight,
-            "o_proj.weights": o_proj_weight,
+            "q_proj.weight": q_proj_weight,
+            "k_proj.weight": k_proj_weight,
+            "v_proj.weight": v_proj_weight,
+            "output_proj.weight": o_proj_weight,
         }
     )
 
@@ -318,7 +318,18 @@ def run_transformer_block(
         Float[Tensor, "batch sequence_length d_model"] Tensor with the output of
         running the Transformer block on the input features while using RoPE.
     """
-    raise NotImplementedError
+    from cs336_basics.models.rope import RotaryPositionalEmbedding
+    from cs336_basics.models.transformer_block import TransformerBlock
+
+    layer = TransformerBlock(d_model, num_heads, d_ff)
+    head_dim = d_model // num_heads
+    layer.load_state_dict(weights)
+
+    rope = RotaryPositionalEmbedding(theta, head_dim, max_seq_len)
+    token_positions = torch.arange(0, in_features.shape[1])
+    cos = rope.cosines[token_positions]
+    sin = rope.sines[token_positions]
+    return layer(in_features, position_embeddings=(cos, sin))
 
 
 def run_transformer_lm(
@@ -426,7 +437,7 @@ def run_rmsnorm(
     from cs336_basics.models.rmsnorm import RMSNorm
 
     layer = RMSNorm(d_model, eps)
-    layer.load_state_dict({"weights": weights})
+    layer.load_state_dict({"weight": weights})
     return layer(in_features)
 
 

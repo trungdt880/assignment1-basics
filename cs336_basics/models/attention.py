@@ -30,7 +30,7 @@ class MultiHeadAttention(nn.Module):
         self.v_proj = Linear(
             self.model_dim, self.num_heads * self.head_dim, device=device, dtype=dtype
         )
-        self.o_proj = Linear(
+        self.output_proj = Linear(
             self.num_heads * self.head_dim, self.model_dim, device=device, dtype=dtype
         )
 
@@ -84,5 +84,5 @@ class MultiHeadAttention(nn.Module):
             output,
             num_heads=self.num_heads,
         )
-        output = self.o_proj(output)
+        output = self.output_proj(output)
         return output

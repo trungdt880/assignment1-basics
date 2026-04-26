@@ -17,9 +17,9 @@ class SwiGLU(nn.Module):
             self.d_ff = round_up_to_multiple(d_model, 64)
 
         self.silu = SiLU()
-        self.linear1 = Linear(d_model, d_ff, device, dtype)
-        self.linear2 = Linear(d_ff, d_model, device, dtype)
-        self.linear3 = Linear(d_model, d_ff, device, dtype)
+        self.w1 = Linear(d_model, d_ff, device, dtype)
+        self.w2 = Linear(d_ff, d_model, device, dtype)
+        self.w3 = Linear(d_model, d_ff, device, dtype)
 
     def forward(self, x):
-        return self.linear2(self.silu(self.linear1(x)) * self.linear3(x))
+        return self.w2(self.silu(self.w1(x)) * self.w3(x))

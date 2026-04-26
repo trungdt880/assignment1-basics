@@ -9,14 +9,12 @@ class Linear(nn.Module):
         self.in_features = in_features
         self.out_features = out_features
         tensor = torch.empty((out_features, in_features), device=device, dtype=dtype)
-        self.weights = nn.Parameter(tensor)
+        self.weight = nn.Parameter(tensor)
         self.init_parameters()
 
     def init_parameters(self):
         std = 2 / (self.in_features + self.out_features)
-        nn.init.trunc_normal_(self.weights, std=std, a=-3 * std, b=3 * std)
+        nn.init.trunc_normal_(self.weight, std=std, a=-3 * std, b=3 * std)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        return einx.dot(
-            "... [in_dim], out_dim [in_dim] -> ... out_dim", x, self.weights
-        )
+        return einx.dot("... [in_dim], out_dim [in_dim] -> ... out_dim", x, self.weight)
