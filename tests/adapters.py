@@ -151,7 +151,19 @@ def run_multihead_self_attention(
         Float[Tensor, " ... sequence_length d_model"]: Tensor with the output of running your optimized, batched multi-headed attention
         implementation with the given QKV projection weights and input features.
     """
-    raise NotImplementedError
+    from cs336_basics.models.attention import MultiHeadAttention
+
+    layer = MultiHeadAttention(d_model, num_heads)
+    layer.load_state_dict(
+        {
+            "q_proj.weights": q_proj_weight,
+            "k_proj.weights": k_proj_weight,
+            "v_proj.weights": v_proj_weight,
+            "o_proj.weights": o_proj_weight,
+        }
+    )
+
+    return layer(in_features)
 
 
 def run_multihead_self_attention_with_rope(
@@ -191,7 +203,24 @@ def run_multihead_self_attention_with_rope(
         Float[Tensor, " ... sequence_length d_model"]: Tensor with the output of running your optimized, batched multi-headed attention
         implementation with the given QKV projection weights and input features.
     """
-    raise NotImplementedError
+    from cs336_basics.models.attention import MultiHeadAttention
+    from cs336_basics.models.rope import RotaryPositionalEmbedding
+
+    layer = MultiHeadAttention(d_model, num_heads)
+    rope = RotaryPositionalEmbedding(theta, layer.head_dim, max_seq_len)
+    cos = rope.cosines[token_positions]
+    sin = rope.sines[token_positions]
+
+    layer.load_state_dict(
+        {
+            "q_proj.weights": q_proj_weight,
+            "k_proj.weights": k_proj_weight,
+            "v_proj.weights": v_proj_weight,
+            "o_proj.weights": o_proj_weight,
+        }
+    )
+
+    return layer(in_features, position_embeddings=(cos, sin))
 
 
 def run_rope(
@@ -213,9 +242,9 @@ def run_rope(
     Returns:
         Float[Tensor, " ... sequence_length d_k"]: Tensor with RoPEd input.
     """
-    from cs336_basics.models.rope import RoPE
+    from cs336_basics.models.rope import RotaryPositionalEmbedding
 
-    layer = RoPE(theta, d_k, max_seq_len)
+    layer = RotaryPositionalEmbedding(theta, d_k, max_seq_len)
     return layer(in_query_or_key, token_positions)
 
 
