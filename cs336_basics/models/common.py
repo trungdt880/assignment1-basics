@@ -23,7 +23,7 @@ def cross_entropy_loss(
 
 def lr_cosine_schedule(
     cur_step: int, lr_min: float, lr_max: float, warmup_step: int, cosine_cycle_step
-):
+) -> float:
     if cur_step < warmup_step:
         return cur_step / warmup_step * lr_max
     elif cur_step <= cosine_cycle_step:
@@ -37,3 +37,16 @@ def lr_cosine_schedule(
         return lr_min
     else:
         raise ValueError(f"Invalid step {cur_step}")
+
+
+def gradient_clipping(
+    params: Float[torch.Tensor, "..."], max_l2_norm: float, eps: float = 1e-6
+):
+    grads = [p.grad.data for p in params if p.grad is not None]
+
+    total_grads = torch.sqrt(torch.sum([(g**2).sum() for g in grads]))
+
+    if total_grads >= max_l2_norm:
+        scale = max_l2_norm / (total_grads + eps)
+        for g in grads:
+            g.mul_(scale)
