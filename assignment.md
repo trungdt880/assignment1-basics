@@ -131,4 +131,6 @@ TOTAL_FLOPS=133,577,729,638,400
 
 ```
 
-
+# learning_rate_tuning
+- converge speed 1e2 > 1e1
+- 1e3 diverge
