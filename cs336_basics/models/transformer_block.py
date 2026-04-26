@@ -38,3 +38,4 @@ class TransformerBlock(nn.Module):
         x = x + attn
         ffn = self.ffn(self.ln2(x))
         return x + ffn
+        # Total: 2*((model_dim)**2*seq_len)*4 + 4*seq_len*d_model + 6*d_model*seq_len*d_ff
