@@ -42,7 +42,6 @@ class TransformerLM(nn.Module):
     def forward(
         self,
         x: Int[torch.Tensor, "batch seq_len"],
-        mask: Bool[torch.Tensor, "... seq_len seq_len"] | None = None,
     ) -> Float[torch.Tensor, "batch seq_len vocab_size"]:
         token_positions = torch.arange(0, x.shape[1], device=x.device)
         cos = self.rope.cosines[token_positions]
