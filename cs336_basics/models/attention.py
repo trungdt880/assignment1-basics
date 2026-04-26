@@ -40,8 +40,8 @@ class MultiHeadAttention(nn.Module):
         mask: Bool[torch.Tensor, "... seq_len seq_len"] | None = None,
         position_embeddings: (
             tuple[
-                Float[torch.Tensor, "max_seq_len half_d_k"],
-                Float[torch.Tensor, "max_seq_len half_d_k"],
+                Float[torch.Tensor, "max_seq_len half_head_dim"],
+                Float[torch.Tensor, "max_seq_len half_head_dim"],
             ]
             | None
         ) = None,
