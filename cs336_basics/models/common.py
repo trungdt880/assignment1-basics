@@ -1,6 +1,6 @@
 import math
 import os
-from pathlib import Path
+from collections.abc import Iterable
 from typing import IO, BinaryIO
 
 import numpy as np
@@ -45,7 +45,7 @@ def lr_cosine_schedule(
 
 
 def gradient_clipping(
-    params: Float[torch.Tensor, "..."], max_l2_norm: float, eps: float = 1e-6
+    params: Iterable[Float[torch.Tensor, "..."]], max_l2_norm: float, eps: float = 1e-6
 ):
     grads = [p.grad.data for p in params if p.grad is not None]
 
@@ -64,18 +64,8 @@ def get_batch(
     ids = ids[..., None] + np.arange(context_length)
     inputs = dataset[ids]
     targets = dataset[ids + 1]
-    inputs = (
-        torch.tensor(inputs, dtype=torch.long)
-        .clone()
-        .pin_memory()
-        .to(device, non_blocking=True)
-    )
-    targets = (
-        torch.tensor(targets, dtype=torch.long)
-        .clone()
-        .pin_memory()
-        .to(device, non_blocking=True)
-    )
+    inputs = torch.tensor(inputs, dtype=torch.long, device=device)
+    targets = torch.tensor(targets, dtype=torch.long, device=device)
     return inputs, targets
 
 
@@ -102,3 +92,15 @@ def load_checkpoint(
     model.load_state_dict(state_dict["model"])
     optimizer.load_state_dict(state_dict["optimizer"])
     return state_dict["iteration"]
+
+
+def set_seed(seed: int = 42):
+    import random
+
+    import numpy as np
+
+    random.seed(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed_all(seed)
