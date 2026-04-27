@@ -6,7 +6,11 @@ from typing import IO, BinaryIO
 import numpy as np
 import numpy.typing as npt
 import torch
+import torch.nn as nn
 from jaxtyping import Float, Int
+from torch.distributions import Categorical
+
+from cs336_basics.models.softmax import softmax
 
 
 def round_up_to_multiple(x: int, m: int) -> int:
@@ -104,3 +108,63 @@ def set_seed(seed: int = 42):
     torch.manual_seed(seed)
     if torch.cuda.is_available():
         torch.cuda.manual_seed_all(seed)
+
+
+@torch.no_grad()
+def decode(
+    model: nn.Module,
+    input_ids: Int[torch.Tensor, "batch seq_len"],
+    eos_token_id: int,
+    temperature: float = 1.0,
+    max_generated_tokens: int | None = None,
+    threshold: float | None = None,
+) -> list[int]:
+    model.eval()
+    output_ids = []
+
+    while True:
+        if max_generated_tokens is not None and len(output_ids) >= max_generated_tokens:
+            break
+        if len(output_ids) > 0:
+            input_ids = torch.concatenate(
+                [
+                    input_ids,
+                    torch.tensor(
+                        [[output_ids[-1]]],
+                        dtype=input_ids.dtype,
+                        device=input_ids.device,
+                    ),
+                ],
+                dim=-1,
+            )
+        assert (
+            input_ids.shape[-1] < model.context_length
+        ), f"Exceed model capability ({input_ids.shape=})"
+        # bs=1; last token
+        y = model(input_ids)[0, -1]
+
+        probs = softmax(y, dim=-1, temperature=temperature)
+        # if threshold -> nucleus sampling
+        if threshold is not None:
+            sorted_probs, sorted_indices = torch.sort(probs, descending=True, dim=-1)
+            cumulative_probs = torch.cumsum(sorted_probs, dim=-1)
+            sorted_indices_to_remove = cumulative_probs > threshold
+
+            # shift right 1 because the last entry (which makes the cumulative > threshold) should be kept
+            sorted_indices_to_remove[..., 1:] = sorted_indices_to_remove[
+                ..., :-1
+            ].clone()
+            # shift right 1 -> first value is unset -> set to False to keep
+            sorted_indices_to_remove[..., 0] = False
+            indices_to_remove = sorted_indices_to_remove.scatter(
+                -1, sorted_indices, sorted_indices_to_remove
+            )
+            y[indices_to_remove] = float("-inf")
+            probs = softmax(y, dim=-1)
+
+        pred_token_id = torch.multinomial(probs, num_samples=1).item()
+
+        output_ids.append(pred_token_id)
+        if pred_token_id == eos_token_id:
+            break
+    return output_ids
