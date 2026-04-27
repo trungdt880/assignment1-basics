@@ -16,8 +16,8 @@ training:
   output_dir: ./outputs
   experiment_name: null
   max_steps: 30000
-  max_learnt_tokens: null
-  global_batch_size: 1024
+  max_learnt_tokens: 327_680_000
+  global_batch_size: 128
   batch_size: null
   gradient_accumulation_steps: 1
   learning_rate: 0.001
@@ -41,7 +41,7 @@ training:
   save_total_limit: 5
   eval_strategy: 'no'
   eval_steps: 500
-  eval_batch_size: 2
+  eval_batch_size: 128
   eval_num_batches: null
   save_best_eval_metric_name: ''
   save_best_eval_metric_greater_is_beter: true
@@ -51,8 +51,3 @@ training:
   dataloader_num_workers: 2
   use_wandb: true
   wandb_project: cs336_hw1
-max_steps: 30000
-save_steps: 1000
-warmup_lr: 0.0001
-warmup_steps: 1500
-num_eval_batches: 1093399

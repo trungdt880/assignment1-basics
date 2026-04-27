@@ -50,7 +50,7 @@ def lr_cosine_schedule(
 
 def gradient_clipping(
     params: Iterable[Float[torch.Tensor, "..."]], max_l2_norm: float, eps: float = 1e-6
-):
+) -> float:
     grads = [p.grad.data for p in params if p.grad is not None]
 
     total_grads = torch.sqrt(sum([(g**2).sum() for g in grads]))
@@ -59,6 +59,7 @@ def gradient_clipping(
         scale = max_l2_norm / (total_grads + eps)
         for g in grads:
             g.mul_(scale)
+    return total_grads
 
 
 def get_batch(

@@ -23,6 +23,9 @@ from cs336_basics.models.common import (
 from cs336_basics.models.optimizers import AdamW
 from cs336_basics.models.transformer import TransformerLM
 
+torch.backends.cuda.matmul.allow_tf32 = True
+torch.backends.cudnn.allow_tf32 = True
+
 
 def main(config: Config):
     config.validate()
@@ -60,6 +63,7 @@ def main(config: Config):
         )
 
     model = TransformerLM(**config.model.__dict__)
+    model = torch.compile(model)
 
     train_data = np.load(config.data.dataset_path, mmap_mode="r")
     val_data = np.load(config.data.val_dataset_path, mmap_mode="r")
@@ -96,6 +100,9 @@ def main(config: Config):
             / config.model.context_length
         )
     config.training.max_steps = max_steps
+    logger.info(
+        f"Max learnt token: {config.training.max_learnt_tokens} -> Max steps: {max_steps}"
+    )
 
     warmup_lr = (
         config.training.learning_rate * config.training.warmup_learning_rate_ratio
@@ -123,7 +130,7 @@ def main(config: Config):
         loss = cross_entropy_loss(pred_y, y)
 
         loss.backward()
-        gradient_clipping(model.parameters(), config.training.max_grad_norm)
+        grad_norm = gradient_clipping(model.parameters(), config.training.max_grad_norm)
 
         lr = lr_cosine_schedule(
             i,
@@ -143,7 +150,11 @@ def main(config: Config):
             model_outpath = ckpt_dir / f"{str(i).zfill(9)}.pt"
             save_checkpoint(model, optimizer, i, model_outpath.resolve().as_posix())
 
-        log_dict = dict(loss=loss.detach().item())
+        log_dict = {
+            "train/loss": loss.detach().item(),
+            "lr": lr,
+            "train/grad_norm": grad_norm,
+        }
         if (i % config.training.eval_steps == 0 and i > 0) or i == max_steps - 1:
             with torch.no_grad():
                 model.eval()
@@ -166,11 +177,11 @@ def main(config: Config):
                 val_bpt = val_loss / math.log(2)
             model.train()
             log_dict.update(
-                dict(
-                    val_loss=val_loss,
-                    val_ppl=val_ppl,
-                    val_bits_per_token=val_bpt,
-                )
+                {
+                    "val/loss": val_loss,
+                    "val/ppl": val_ppl,
+                    "val/bits_per_token": val_bpt,
+                }
             )
 
         if config.training.use_wandb:
